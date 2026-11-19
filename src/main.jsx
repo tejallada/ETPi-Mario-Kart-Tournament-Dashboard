@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   alreadyAdvanced, availableCups, confirmResult, demoState, drawGroups, groups,
-  initialState, labels, result, seedLabels, semifinals, stage,
+  initialState, labels, maxPlayers, minPlayers, result, seedLabels, semifinals, stage,
 } from './tournament.js'
 import { client, demoStorageKey, readDemo, readTournament, saveTournament } from './store.js'
 import './style.css'
@@ -30,7 +30,7 @@ function MatchCard({ code, round, names }) {
   const slots = seedLabels[code] ?? Array.from({ length: 4 }, (_, i) => `Player ${i + 1}`)
   return <article className={`match-card ${code === 'F' ? 'final-card' : ''}`}>
     <header><h3>{labels[code]}</h3><span className={`match-status ${complete ? 'confirmed' : ''}`}>{complete ? 'Confirmed' : round ? 'Awaiting scores' : 'Pending'}</span></header>
-    <ol>{slots.map((slot, i) => {
+    <ol>{slots.slice(0, ids?.length ?? slots.length).map((slot, i) => {
       const id = ids?.[i]
       return <li key={slot} className={complete && i < count ? 'advanced' : ''}>
         <span className="rank">{i + 1}</span><span className={!id ? 'placeholder' : ''}>{id ? names[id] : slot}</span>
@@ -109,15 +109,15 @@ function Admin({ row, names, run, busy }) {
   return <div className="admin-grid">
     {!client && <section className="panel wide"><h2>Demo controls</h2><p>Changes stay in this browser. Start with an empty roster to try drawing groups, or reload the sample bracket.</p>
       <div className="actions"><button disabled={busy} onClick={() => run(initialState)}>Start empty demo</button><button disabled={busy} onClick={() => run(demoState)}>Load sample bracket</button></div></section>}
-    {active === -1 ? <section className="panel"><h2>Player roster</h2><p>{state.players.length} of 16 players. Drawing groups locks the roster.</p>
+    {active === -1 ? <section className="panel"><h2>Player roster</h2><p>{state.players.length} registered. Draw groups with {minPlayers}–{maxPlayers} players to lock the roster.</p>
       {state.players.map(({ id, name }) => <form className="roster-form" key={id} onSubmit={(event) => savePlayer(event, id)}>
         <input name="name" aria-label={`Name for ${name}`} defaultValue={name} required maxLength={60} />
         <button disabled={busy}>Rename</button><button type="button" aria-label={`Remove ${name}`} disabled={busy} onClick={() => run(() => ({ ...state, players: state.players.filter((player) => player.id !== id) }))}>Remove</button>
       </form>)}
-      {state.players.length < 16 && <form className="roster-form" onSubmit={(event) => savePlayer(event)}>
+      {state.players.length < maxPlayers && <form className="roster-form" onSubmit={(event) => savePlayer(event)}>
         <input name="name" aria-label="New player name" placeholder="Player name" required maxLength={60} /><button disabled={busy}>Add player</button>
       </form>}
-      <button className="primary" disabled={busy || state.players.length !== 16} onClick={() => {
+      <button className="primary" disabled={busy || state.players.length < minPlayers} onClick={() => {
         if (window.confirm('Draw groups and lock the roster?')) run(() => drawGroups(state))
       }}>Randomly draw groups</button>
     </section> : <section className="panel"><h2>Grand Prix results</h2><label>Match<select value={code} onChange={(event) => setSelected(event.target.value)}>{playable.map((key) => <option key={key} value={key}>{labels[key]}{state.matches[key].order.length ? ' · confirmed' : ''}</option>)}</select></label>
@@ -240,7 +240,8 @@ function App() {
   const names = Object.fromEntries((state?.players ?? []).map(({ id, name }) => [id, name]))
   const active = state ? stage(state) : -1
   const champion = names[state?.matches.F?.order[0]]
-  const groupCount = groups.filter((key) => state?.matches[key]?.order.length).length
+  const qualifyingGroups = active === -1 ? groups : groups.filter((key) => state.matches[key])
+  const groupCount = qualifyingGroups.filter((key) => state?.matches[key]?.order.length).length
   return <>
     <header className="topbar"><div className="shell top-inner">
       <button className="brand" onClick={() => { setView('bracket'); setMessage('') }}><span className="brand-mark"><Icon name="flag" size={22} /></span>Epsilon Tau Pi</button>
@@ -260,7 +261,7 @@ function App() {
       {!state && !loadError && <p role="status">Loading tournament…</p>}
       {state && <div className="overview">
         <div><span><Icon name="bracket" size={17} />Current round</span><strong>{stages[active + 1]}</strong></div>
-        <div><span><Icon name="people" size={17} />Players</span><strong>{state.players.length} <small>/ 16</small></strong></div>
+        <div><span><Icon name="people" size={17} />Players</span><strong>{state.players.length} <small>/ {maxPlayers}</small></strong></div>
         <div><span><Icon name="trophy" size={17} />Champion</span><strong className={champion ? 'gold' : ''}>{champion ?? 'To be crowned'}</strong></div>
       </div>}
       {view === 'admin' ? <section className="content">
@@ -281,15 +282,15 @@ function App() {
           <button aria-pressed={view === 'bracket'} onClick={() => setView('bracket')}><Icon name="bracket" size={18} />Bracket</button>
           <button aria-pressed={view === 'players'} onClick={() => setView('players')}><Icon name="people" size={18} />Players</button>
         </nav>
-        {view === 'players' ? <><div className="section-heading"><h2>Player roster</h2><span>{state.players.length} / 16 registered</span></div>
+        {view === 'players' ? <><div className="section-heading"><h2>Player roster</h2><span>{state.players.length} registered</span></div>
           {state.players.length ? <ul className="players">{state.players.map(({ id, name }) => {
             const group = groups.find((key) => state.matches[key]?.ids.includes(id))
             return <li key={id}>{name}<span>{labels[group] ?? 'Registered'}</span></li>
           })}</ul> : <p>No players registered yet.</p>}
         </> : <>
-          <div className="section-heading"><div><h2>Qualifying groups</h2><p>Top two from each group advance to the semifinals.</p></div><span>{groupCount} / 4 confirmed</span></div>
-          <div className="qualifiers">{groups.map((code) => <MatchCard key={code} code={code} round={state.matches[code]} names={names} />)}</div>
-          <div className="section-heading later"><div><h2>Knockout bracket</h2><p>Top two from each semifinal advance. Highest final score wins.</p></div></div>
+          <div className="section-heading"><div><h2>Qualifying groups</h2><p>Up to two from each group advance to the semifinals.</p></div><span>{groupCount} / {qualifyingGroups.length} confirmed</span></div>
+          <div className="qualifiers">{qualifyingGroups.map((code) => <MatchCard key={code} code={code} round={state.matches[code]} names={names} />)}</div>
+          <div className="section-heading later"><div><h2>Knockout bracket</h2><p>Up to two from each semifinal advance. Highest final score wins.</p></div></div>
           <div className="knockouts">{[...semifinals, 'F'].map((code) => <MatchCard key={code} code={code} round={state.matches[code]} names={names} />)}</div>
         </>}
       </section>}

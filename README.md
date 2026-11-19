@@ -43,7 +43,7 @@ npm run build
 
 ## Run the tournament
 
-- Add 16 human players. Draw groups when the roster is final.
+- Add 2–16 human players. Drawing groups balances the roster across up to four qualifying groups. Empty groups are skipped, and up to two players advance from each group and each semifinal.
 - Enter each human player's total Grand Prix points, including any zero scores, and confirm each result. The app creates the next round when all matches in the current round are confirmed.
 - When a tie affects qualification, semifinal seeding, or the championship, select the players in their tiebreaker finishing order.
 - To correct a score, select the earlier match. Corrections after advancement require a second confirmation. A downstream match keeps its scores if its set of players stays the same. If its players change, it needs fresh scores and confirmation.

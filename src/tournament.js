@@ -1,4 +1,6 @@
 export const groups = ['A', 'B', 'C', 'D']
+export const minPlayers = 2
+export const maxPlayers = 16
 export const semifinals = ['S1', 'S2']
 export const labels = {
   A: 'Group A', B: 'Group B', C: 'Group C', D: 'Group D',
@@ -19,7 +21,7 @@ export const initialState = () => ({
 
 const match = (ids) => ({ ids, scores: {}, order: [], ties: [] })
 const winners = (round) => round?.order.slice(0, 2) ?? []
-const ready = (matches, keys) => keys.every((key) => matches[key]?.order.length === 4)
+const ready = (matches, keys) => keys.every((key) => matches[key] && matches[key].order.length === matches[key].ids.length)
 
 export function shuffle(items, random = Math.random) {
   const shuffled = [...items]
@@ -33,14 +35,21 @@ export function shuffle(items, random = Math.random) {
 }
 
 export function drawGroups(state, random) {
-  if (Object.keys(state.matches).length || state.players.length !== 16) {
-    throw new Error('Add exactly 16 players before drawing groups.')
+  const { length } = state.players
+  if (Object.keys(state.matches).length || length < minPlayers || length > maxPlayers) {
+    throw new Error(`Add ${minPlayers}–${maxPlayers} players before drawing groups.`)
   }
   const ids = shuffle(state.players.map(({ id }) => id), random)
-  return {
-    ...state,
-    matches: Object.fromEntries(groups.map((key, i) => [key, match(ids.slice(i * 4, i * 4 + 4))])),
+  const baseSize = Math.floor(length / groups.length)
+  let offset = 0
+  const matches = {}
+  for (const [index, key] of groups.entries()) {
+    const size = baseSize + Number(index < length % groups.length)
+    if (!size) break
+    matches[key] = match(ids.slice(offset, offset + size))
+    offset += size
   }
+  return { ...state, matches }
 }
 
 export function stage(state) {
@@ -92,16 +101,16 @@ export function confirmResult(state, key, submitted) {
   const matches = { ...state.matches, [key]: submitted }
   function setLineup(id, ids) {
     const prior = matches[id]
-    if (prior && ids.every((player) => prior.ids.includes(player))) {
+    if (prior && prior.ids.length === ids.length && ids.every((player) => prior.ids.includes(player))) {
       matches[id] = { ...prior, ids }
     } else {
       matches[id] = match(ids)
     }
   }
-  if (ready(matches, groups)) {
+  if (ready(matches, groups.filter((group) => matches[group]))) {
     const [[a1, a2], [b1, b2], [c1, c2], [d1, d2]] = groups.map((group) => winners(matches[group]))
-    setLineup('S1', [a1, b2, c1, d2])
-    setLineup('S2', [a2, b1, c2, d1])
+    setLineup('S1', [a1, b2, c1, d2].filter(Boolean))
+    setLineup('S2', [a2, b1, c2, d1].filter(Boolean))
   }
   if (ready(matches, semifinals)) {
     setLineup('F', semifinals.flatMap((semi) => winners(matches[semi])))

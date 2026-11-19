@@ -15,7 +15,7 @@ const save = (state, key, points = [60, 48, 36, 24], choices) => {
 }
 const qualified = () => groups.reduce((state, group) => save(state, group), drawn())
 
-test('draw requires exactly 16 people and assigns each person once', () => {
+test('a full draw assigns each person once', () => {
   assert.throws(() => drawGroups(initialState()))
   const state = drawGroups(registered, () => 0.5)
   const lineups = groups.map((group) => state.matches[group].ids)
@@ -74,4 +74,31 @@ test('corrections preserve valid downstream scores and clear matches with a chan
 test('excluded cups stay excluded if renamed by case or removed and re-added', () => {
   const state = { ...initialState(), cups: ['flower cup', 'Leaf Cup'], picked: ['Flower Cup'] }
   assert.deepEqual(availableCups(state), ['Leaf Cup'])
+})
+
+test('every roster size from 2 to 15 advances through both semifinals and the final', () => {
+  assert.throws(() => drawGroups({ ...registered, players: roster.slice(0, 1) }))
+  for (let count = 2; count < 16; count++) {
+    let state = drawGroups({ ...registered, players: roster.slice(0, count) }, () => 0.5)
+    const activeGroups = groups.filter((key) => state.matches[key])
+    const lineups = activeGroups.map((key) => state.matches[key].ids)
+    assert.equal(activeGroups.length, Math.min(count, 4))
+    assert.equal(lineups.flat().length, count)
+    assert.equal(new Set(lineups.flat()).size, count)
+    const sizes = lineups.map((ids) => ids.length)
+    assert(Math.max(...sizes) - Math.min(...sizes) <= 1)
+    for (const key of activeGroups) state = save(state, key)
+    assert.equal(stage(state), 1)
+    for (const key of ['S1', 'S2']) {
+      assert(state.matches[key].ids.length > 0)
+      assert.deepEqual(state.matches[key].scores, {})
+      state = save(state, key)
+    }
+    assert.equal(stage(state), 2)
+    assert.equal(state.matches.F.ids.length, Math.min(count, 4))
+    assert.deepEqual(state.matches.F.scores, {})
+    state = save(state, 'F')
+    assert.equal(stage(state), 3)
+    assert.equal(state.matches.F.order[0], state.matches.F.ids[0])
+  }
 })
