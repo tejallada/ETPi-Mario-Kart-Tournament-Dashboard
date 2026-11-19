@@ -39,7 +39,7 @@ npm run build
 1. In your GitHub repository, open **Settings → Pages**. Under **Build and deployment**, set **Source** to **GitHub Actions**. GitHub Free supports Pages for public repositories. [GitHub Pages setup](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 2. Under **Settings → Secrets and variables → Actions → Variables**, add repository variables named `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, using the same values as your local configuration.
 3. Commit and push the app files, including the lockfile and [.github/workflows/pages.yml](.github/workflows/pages.yml), to `main`. The workflow tests, builds, and deploys the app. If the files are already pushed when you finish configuring Pages, open **Actions → Deploy tournament to GitHub Pages → Run workflow**. Run it again whenever the build-time Supabase variables change. [Vite deployment guide](https://vite.dev/guide/static-deploy.html)
-4. Open the deployed URL from the workflow or **Settings → Pages**. Check both public standings and admin sign-in on that URL. A build with missing Supabase variables displays Demo mode.
+4. Open the deployed URL from the workflow or **Settings → Pages**. Check both public standings and admin sign-in on that URL. The Pages workflow fails before deployment if the project URL or publishable key is missing.
 
 ## Run the tournament
 
