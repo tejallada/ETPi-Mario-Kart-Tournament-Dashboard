@@ -143,7 +143,7 @@ function App() {
   const [row, setRow] = useState(() => client ? null : readDemo())
   const [view, setView] = useState('bracket')
   const [session, setSession] = useState(null)
-  const [authorized, setAuthorized] = useState(false)
+  const [adminId, setAdminId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [message, setMessage] = useState('')
@@ -187,13 +187,14 @@ function App() {
   }, [])
 
   const userId = session?.user.id
+  const authorized = Boolean(userId && userId === adminId)
   useEffect(() => {
-    setAuthorized(false)
+    setAdminId(null)
     if (!userId) return
     let alive = true
     client.rpc('is_tournament_admin').then(({ data, error }) => {
       if (!alive) return
-      setAuthorized(data === true)
+      setAdminId(data === true ? userId : null)
       if (error) setMessage(error.message)
     })
     return () => { alive = false }
@@ -281,7 +282,10 @@ function App() {
           <button aria-pressed={view === 'players'} onClick={() => setView('players')}><Icon name="people" size={18} />Players</button>
         </nav>
         {view === 'players' ? <><div className="section-heading"><h2>Player roster</h2><span>{state.players.length} / 16 registered</span></div>
-          {state.players.length ? <ul className="players">{state.players.map(({ id, name }) => <li key={id}>{name}<span>{groups.find((group) => state.matches[group]?.ids.includes(id)) ? labels[groups.find((group) => state.matches[group]?.ids.includes(id))] : 'Registered'}</span></li>)}</ul> : <p>No players registered yet.</p>}
+          {state.players.length ? <ul className="players">{state.players.map(({ id, name }) => {
+            const group = groups.find((key) => state.matches[key]?.ids.includes(id))
+            return <li key={id}>{name}<span>{labels[group] ?? 'Registered'}</span></li>
+          })}</ul> : <p>No players registered yet.</p>}
         </> : <>
           <div className="section-heading"><div><h2>Qualifying groups</h2><p>Top two from each group advance to the semifinals.</p></div><span>{groupCount} / 4 confirmed</span></div>
           <div className="qualifiers">{groups.map((code) => <MatchCard key={code} code={code} round={state.matches[code]} names={names} />)}</div>

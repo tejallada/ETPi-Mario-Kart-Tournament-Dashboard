@@ -25,7 +25,9 @@ export function shuffle(items, random = Math.random) {
   const shuffled = [...items]
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1))
-    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    const player = shuffled[i]
+    shuffled[i] = shuffled[j]
+    shuffled[j] = player
   }
   return shuffled
 }
@@ -63,10 +65,9 @@ export function result(ids, values, key, choices = {}) {
   for (const points of new Set(sorted.map((id) => scores[id]))) {
     const tied = sorted.filter((id) => scores[id] === points)
     const first = order.length
-    const places = key === 'F' ? 1 : groups.includes(key) ? 2 : 1
-    const affectsResult = key === 'F' || groups.includes(key)
-      ? first < places
-      : first < 2 && first + tied.length > 2
+    const cutoff = key === 'F' ? 1 : 2
+    // Qualifier seed order matters even when both tied players advance.
+    const affectsResult = first < cutoff && (groups.includes(key) || first + tied.length > cutoff)
     if (tied.length > 1 && affectsResult) {
       const count = key === 'F' ? 1 : Math.min(2 - first, tied.length)
       const selected = Array.from({ length: count }, (_, i) => choices[points]?.[i])
