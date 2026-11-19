@@ -19,7 +19,7 @@ export const initialState = () => ({
   ], picked: [],
 })
 
-const match = (ids) => ({ ids, scores: {}, order: [], ties: [] })
+const match = (ids) => ({ ids, order: [] })
 const winners = (round) => round?.order.slice(0, 2) ?? []
 const ready = (matches, keys) => keys.every((key) => matches[key] && matches[key].order.length === matches[key].ids.length)
 
@@ -59,46 +59,19 @@ export function stage(state) {
   return Object.keys(state.matches).length ? 0 : -1
 }
 
-export function result(ids, values, key, choices = {}) {
-  const scores = {}
-  for (const id of ids) {
-    const value = String(values[id] ?? '').trim()
-    if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
-      throw new Error('Enter a whole, nonnegative Grand Prix total for each player.')
-    }
-    scores[id] = Number(value)
-  }
-  const sorted = [...ids].sort((a, b) => scores[b] - scores[a])
-  const order = []
-  const ties = []
-  for (const points of new Set(sorted.map((id) => scores[id]))) {
-    const tied = sorted.filter((id) => scores[id] === points)
-    const first = order.length
-    const cutoff = key === 'F' ? 1 : 2
-    // Qualifier seed order matters even when both tied players advance.
-    const affectsResult = first < cutoff && (groups.includes(key) || first + tied.length > cutoff)
-    if (tied.length > 1 && affectsResult) {
-      const count = key === 'F' ? 1 : Math.min(2 - first, tied.length)
-      const selected = Array.from({ length: count }, (_, i) => choices[points]?.[i])
-      const valid = selected.every((id) => tied.includes(id)) && new Set(selected).size === count
-      ties.push({ points, ids: tied, first, count, resolved: valid })
-      order.push(...(valid ? [...selected, ...tied.filter((id) => !selected.includes(id))] : tied))
-    } else {
-      order.push(...tied)
-    }
-  }
-  return { ids, scores, order, ties }
-}
-
 export function alreadyAdvanced(state, key) {
   if (groups.includes(key)) return Boolean(state.matches.S1)
   if (semifinals.includes(key)) return Boolean(state.matches.F)
   return Boolean(state.matches.F?.order.length)
 }
 
-export function confirmResult(state, key, submitted) {
-  if (submitted.ties.some((tie) => !tie.resolved)) throw new Error('Resolve the tiebreaker before confirming.')
-  const matches = { ...state.matches, [key]: submitted }
+export function confirmResult(state, key, order) {
+  const round = state.matches[key]
+  if (!round || order.length !== round.ids.length || new Set(order).size !== round.ids.length ||
+      order.some((id) => !round.ids.includes(id))) {
+    throw new Error('Assign every player to one finishing place.')
+  }
+  const matches = { ...state.matches, [key]: { ids: round.ids, order: [...order] } }
   function setLineup(id, ids) {
     const prior = matches[id]
     if (prior && prior.ids.length === ids.length && ids.every((player) => prior.ids.includes(player))) {
@@ -120,16 +93,13 @@ export function confirmResult(state, key, submitted) {
   return { ...state, matches }
 }
 
-export function cupForMatch(state, key) {
-  return state.cupDraws?.findLast((draw) => draw.match === key)?.cup
+export function selectedCups(state) {
+  return [...(state.picked ?? []), ...(state.cupDraws ?? []).map(({ cup }) => cup)]
 }
 
-export function recordCupDraw(state, key, cup) {
-  const round = state.matches[key]
-  if (!round || round.order.length || !state.cups.includes(cup)) {
-    throw new Error('Choose an unconfirmed match and a cup from the wheel.')
-  }
-  return { ...state, cupDraws: [...(state.cupDraws ?? []), { match: key, cup }] }
+export function recordCupDraw(state, cup) {
+  if (!state.cups.includes(cup)) throw new Error('Choose a cup from the wheel.')
+  return { ...state, cupDraws: [...(state.cupDraws ?? []), { cup }] }
 }
 
 export function demoState() {
@@ -139,5 +109,5 @@ export function demoState() {
     players: names.map((name, i) => ({ id: String(i + 1), name })),
   }, () => 0.999)
   const ids = state.matches.A.ids
-  return confirmResult(state, 'A', result(ids, Object.fromEntries(ids.map((id, i) => [id, [54, 46, 38, 29][i]])), 'A'))
+  return confirmResult(state, 'A', ids)
 }

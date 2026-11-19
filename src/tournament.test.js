@@ -1,17 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  alreadyAdvanced, confirmResult, cupForMatch, drawGroups, groups,
-  initialState, recordCupDraw, result, stage,
+  alreadyAdvanced, confirmResult, drawGroups, groups,
+  initialState, recordCupDraw, selectedCups, stage,
 } from './tournament.js'
 
 const roster = Array.from({ length: 16 }, (_, i) => ({ id: String(i + 1), name: `Player ${i + 1}` }))
 const registered = { ...initialState(), players: roster }
 const drawn = () => drawGroups(registered, () => 0.99)
-const scores = (ids, points) => Object.fromEntries(ids.map((id, i) => [id, points[i]]))
-const save = (state, key, points = [60, 48, 36, 24], choices) => {
+const save = (state, key, finishingOrder) => {
   const ids = state.matches[key].ids
-  return confirmResult(state, key, result(ids, scores(ids, points), key, choices))
+  return confirmResult(state, key, finishingOrder?.map((index) => ids[index]) ?? ids)
 }
 const qualified = () => groups.reduce((state, group) => save(state, group), drawn())
 
@@ -24,67 +23,58 @@ test('a full draw assigns each person once', () => {
   assert.throws(() => drawGroups(state))
 })
 
-test('qualifiers seed the specified semifinals and each round starts with empty scores', () => {
+test('qualifiers seed the specified semifinals and each round starts with empty placements', () => {
   let state = qualified()
   assert.equal(stage(state), 1)
   assert.deepEqual(state.matches.S1.ids, ['1', '6', '9', '14'])
   assert.deepEqual(state.matches.S2.ids, ['2', '5', '10', '13'])
-  assert.deepEqual(state.matches.S1.scores, {})
+  assert.deepEqual(state.matches.S1.order, [])
   state = save(state, 'S1')
   assert.equal(state.matches.F, undefined)
-  state = save(state, 'S2', [25, 30, 45, 60])
+  state = save(state, 'S2', [3, 2, 1, 0])
   assert.equal(stage(state), 2)
   assert.deepEqual(state.matches.F.ids, ['1', '6', '13', '10'])
-  assert.deepEqual(state.matches.F.scores, {})
-  state = save(state, 'F', [25, 24, 60, 32])
+  assert.deepEqual(state.matches.F.order, [])
+  state = save(state, 'F', [2, 3, 0, 1])
   assert.equal(stage(state), 3)
   assert.equal(state.matches.F.order[0], '13')
 })
 
-test('tiebreakers resolve qualification seeds, semifinal cutoffs and the champion', () => {
-  const ids = ['a', 'b', 'c', 'd']
-  const tied = scores(ids, [60, 60, 60, 30])
-  assert.throws(() => confirmResult(drawn(), 'A', result(ids, tied, 'A')), /tiebreaker/)
-  assert.equal(result(ids, tied, 'A', { 60: ['c', 'c'] }).ties[0].resolved, false)
-  assert.deepEqual(result(ids, tied, 'A', { 60: ['c', 'a'] }).order, ['c', 'a', 'b', 'd'])
-  assert.equal(result(ids, scores(ids, [40, 40, 30, 20]), 'S1').ties.length, 0)
-  assert.equal(result(ids, scores(ids, [60, 40, 40, 20]), 'S1').ties[0].count, 1)
-  assert.equal(result(ids, tied, 'F', { 60: ['b'] }).order[0], 'b')
-  assert.equal(result(ids, scores(ids, [60, 40, 40, 40]), 'F').ties.length, 0)
-  assert.throws(() => result(ids, scores(ids, [60, '', 20, 0]), 'A'))
-  assert.equal(result(ids, scores(ids, [60, 40, 20, 0]), 'A').scores.d, 0)
+test('placements must include every entrant exactly once and can replace a legacy result', () => {
+  const state = drawn()
+  const ids = state.matches.A.ids
+  state.matches.A = { ...state.matches.A, order: ids, scores: { [ids[0]]: 60 }, ties: [] }
+  assert.throws(() => confirmResult(state, 'A', ids.slice(0, 3)), /finishing place/)
+  assert.throws(() => confirmResult(state, 'A', [ids[0], ids[0], ids[2], ids[3]]), /finishing place/)
+  assert.throws(() => confirmResult(state, 'A', ['outsider', ...ids.slice(1)]), /finishing place/)
+  const corrected = save(state, 'A', [1, 0, 2, 3])
+  assert.deepEqual(corrected.matches.A, { ids, order: [ids[1], ids[0], ids[2], ids[3]] })
 })
 
-test('corrections preserve valid downstream scores and clear matches with a changed lineup', () => {
+test('corrections preserve valid downstream placements and clear matches with a changed lineup', () => {
   let state = qualified()
   for (const key of ['S1', 'S2', 'F']) state = save(state, key)
   assert(alreadyAdvanced(state, 'A'))
   assert(alreadyAdvanced(state, 'S1'))
   assert(alreadyAdvanced(state, 'F'))
   const finished = state.matches.F
-  state = save(state, 'A', [61, 45, 36, 25])
+  state = save(state, 'A', [0, 1, 3, 2])
   assert.deepEqual(state.matches.F, finished)
-  state = save(state, 'A', [61, 24, 45, 25])
+  state = save(state, 'A', [0, 2, 3, 1])
   assert.equal(state.matches.S1.order.length, 4)
-  assert.deepEqual(state.matches.S2.scores, {})
+  assert.deepEqual(state.matches.S2.order, [])
   assert.equal(state.matches.F, undefined)
   assert.equal(stage(state), 1)
 })
 
-test('wheel picks can repeat and the latest pick stays attached to its match', () => {
-  let state = { ...drawn(), picked: ['Flower Cup'] }
-  state = recordCupDraw(state, 'A', 'Flower Cup')
-  state = recordCupDraw(state, 'B', 'Flower Cup')
-  state = recordCupDraw(state, 'A', 'Leaf Cup')
-  assert.equal(cupForMatch(state, 'A'), 'Leaf Cup')
-  assert.equal(cupForMatch(state, 'B'), 'Flower Cup')
-  assert.equal(state.cupDraws.length, 3)
-  assert.deepEqual(state.picked, ['Flower Cup'])
+test('wheel picks retain earlier history, allow repeats, and need no match', () => {
+  let state = { ...initialState(), picked: ['Banana Cup'], cupDraws: [{ match: 'A', cup: 'Leaf Cup' }] }
+  state = recordCupDraw(state, 'Flower Cup')
+  state = recordCupDraw(state, 'Flower Cup')
+  assert.deepEqual(selectedCups(state), ['Banana Cup', 'Leaf Cup', 'Flower Cup', 'Flower Cup'])
+  assert.deepEqual(state.cupDraws.at(-1), { cup: 'Flower Cup' })
   assert.deepEqual(state.cups, initialState().cups)
-  assert.throws(() => recordCupDraw(state, 'F', 'Flower Cup'))
-  state = save(state, 'A')
-  assert.equal(cupForMatch(state, 'A'), 'Leaf Cup')
-  assert.throws(() => recordCupDraw(state, 'A', 'Flower Cup'))
+  assert.throws(() => recordCupDraw(state, 'Missing Cup'))
 })
 
 test('every roster size from 2 to 15 advances through both semifinals and the final', () => {
@@ -102,12 +92,12 @@ test('every roster size from 2 to 15 advances through both semifinals and the fi
     assert.equal(stage(state), 1)
     for (const key of ['S1', 'S2']) {
       assert(state.matches[key].ids.length > 0)
-      assert.deepEqual(state.matches[key].scores, {})
+      assert.deepEqual(state.matches[key].order, [])
       state = save(state, key)
     }
     assert.equal(stage(state), 2)
     assert.equal(state.matches.F.ids.length, Math.min(count, 4))
-    assert.deepEqual(state.matches.F.scores, {})
+    assert.deepEqual(state.matches.F.order, [])
     state = save(state, 'F')
     assert.equal(stage(state), 3)
     assert.equal(state.matches.F.order[0], state.matches.F.ids[0])

@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. With no Supabase settings, the app opens in **Demo mode** with sample scores. Select **Admin** to try entering results or picking cups. Choose **Start empty demo** to try managing the roster and drawing groups. Demo edits live in browser storage and stay separate from the shared tournament.
+Open the local URL printed by Vite. With no Supabase settings, the app opens in **Demo mode** with sample placements. Select **Admin** to try entering results or picking cups. Choose **Start empty demo** to try managing the roster and drawing groups. Demo edits live in browser storage and stay separate from the shared tournament.
 
 ```sh
 npm test
@@ -44,7 +44,6 @@ npm run build
 ## Run the tournament
 
 - Add 2–16 human players. Drawing groups balances the roster across up to four qualifying groups. Empty groups are skipped, and up to two players advance from each group and each semifinal.
-- Enter each human player's total Grand Prix points, including any zero scores, and confirm each result. The app creates the next round when all matches in the current round are confirmed.
-- When a tie affects qualification, semifinal seeding, or the championship, select the players in their tiebreaker finishing order.
-- To correct a score, select the earlier match. Corrections after advancement require a second confirmation. A downstream match keeps its scores if its set of players stays the same. If its players change, it needs fresh scores and confirmation.
-- Edit the cup list to match the cups available on your console. Choose an unconfirmed match and spin the wheel. Cups stay on the wheel after every spin. The public bracket shows the latest cup assigned to each match, and the admin spin history retains every pick.
+- Choose the player who finished in each place and confirm the match. Enter the final finishing order after any tiebreaker. The next round opens when every match in the current round is confirmed.
+- To correct placements, select the earlier match. Corrections after advancement require a second confirmation. A downstream match keeps its placements if its players stay the same. If its lineup changes, enter and confirm fresh placements.
+- Edit the cup list to match the cups available on your console. Spin the wheel to add a cup to the shared selection history. Cups stay on the wheel after every spin. Previously selected cups appear in Admin and above the public bracket.
