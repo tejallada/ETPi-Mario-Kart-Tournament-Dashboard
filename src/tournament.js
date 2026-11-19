@@ -120,9 +120,16 @@ export function confirmResult(state, key, submitted) {
   return { ...state, matches }
 }
 
-export function availableCups(state) {
-  const used = new Set(state.picked.map((cup) => cup.toLowerCase()))
-  return state.cups.filter((cup) => !used.has(cup.toLowerCase()))
+export function cupForMatch(state, key) {
+  return state.cupDraws?.findLast((draw) => draw.match === key)?.cup
+}
+
+export function recordCupDraw(state, key, cup) {
+  const round = state.matches[key]
+  if (!round || round.order.length || !state.cups.includes(cup)) {
+    throw new Error('Choose an unconfirmed match and a cup from the wheel.')
+  }
+  return { ...state, cupDraws: [...(state.cupDraws ?? []), { match: key, cup }] }
 }
 
 export function demoState() {

@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  alreadyAdvanced, availableCups, confirmResult, demoState, drawGroups, groups,
-  initialState, labels, maxPlayers, minPlayers, result, seedLabels, semifinals, stage,
+  alreadyAdvanced, confirmResult, cupForMatch, demoState, drawGroups, groups,
+  initialState, labels, maxPlayers, minPlayers, recordCupDraw, result, seedLabels, semifinals, stage,
 } from './tournament.js'
 import { client, demoStorageKey, readDemo, readTournament, saveTournament } from './store.js'
 import './style.css'
@@ -23,13 +23,14 @@ function Icon({ name, size = 20 }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
 
-function MatchCard({ code, round, names }) {
+function MatchCard({ code, round, names, cup }) {
   const complete = Boolean(round?.order.length)
   const ids = complete ? round.order : round?.ids
   const count = code === 'F' ? 1 : 2
   const slots = seedLabels[code] ?? Array.from({ length: 4 }, (_, i) => `Player ${i + 1}`)
   return <article className={`match-card ${code === 'F' ? 'final-card' : ''}`}>
     <header><h3>{labels[code]}</h3><span className={`match-status ${complete ? 'confirmed' : ''}`}>{complete ? 'Confirmed' : round ? 'Awaiting scores' : 'Pending'}</span></header>
+    {round && cup && <p className="match-cup">Cup · {cup}</p>}
     <ol>{slots.slice(0, ids?.length ?? slots.length).map((slot, i) => {
       const id = ids?.[i]
       return <li key={slot} className={complete && i < count ? 'advanced' : ''}>
@@ -87,6 +88,70 @@ function ScoreEditor({ code, round, names, state, run, busy }) {
   </form>
 }
 
+const wheelColors = ['#ff786f', '#f9cc73', '#90acd9', '#e8a5bd']
+
+function CupWheel({ state, playable, run, busy }) {
+  const [selected, setSelected] = useState('')
+  const [rotation, setRotation] = useState(0)
+  const [spinning, setSpinning] = useState(false)
+  const timer = useRef()
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const matches = playable.filter((key) => !state.matches[key].order.length)
+  const code = matches.includes(selected) ? selected : matches[0]
+  const { cups } = state
+  const slice = 360 / Math.max(1, cups.length)
+  const history = state.cupDraws ?? []
+  const current = cupForMatch(state, code)
+
+  function spin() {
+    const index = Math.floor(Math.random() * cups.length)
+    const target = (360 - (index + 0.5) * slice) % 360
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    setRotation((previous) => previous + (reducedMotion ? 0 : 1440) + (target - previous % 360 + 360) % 360)
+    if (!reducedMotion) {
+      setSpinning(true)
+      timer.current = setTimeout(() => setSpinning(false), 1600)
+    }
+    run(() => recordCupDraw(state, code, cups[index]))
+  }
+
+  return <section className="panel">
+    <h2>Cup wheel</h2>
+    <p>Spin to assign a cup to a match. A cup can come up again.</p>
+    {code ? <label>Match for this spin
+      <select value={code} disabled={spinning || busy} onChange={(event) => setSelected(event.target.value)}>
+        {matches.map((key) => <option key={key} value={key}>{labels[key]}</option>)}
+      </select>
+    </label> : <p>{playable.length ? 'All matches are confirmed.' : 'Draw qualifying groups to assign a cup.'}</p>}
+    {cups.length > 0 && <div className="wheel-frame" aria-hidden="true">
+      <div className="wheel-pointer" />
+      <div className="wheel" style={{
+        transform: `rotate(${rotation}deg)`,
+        background: `conic-gradient(${cups.map((_, i) => `${wheelColors[i % wheelColors.length]} ${i * slice}deg ${(i + 1) * slice}deg`).join(', ')})`,
+      }}>
+        {cups.map((cup, i) => <div className="wheel-spoke" key={cup} style={{ transform: `rotate(${(i + 0.5) * slice}deg)` }}>
+          <span>{cup}</span>
+        </div>)}
+        <div className="wheel-hub" />
+      </div>
+    </div>}
+    <div className="cup-output" aria-live="polite">{spinning ? 'Spinning…' : current ?? (code ? 'No cup assigned yet' : '—')}</div>
+    <button className="gold-button" disabled={busy || spinning || !code || !cups.length} onClick={spin}>Spin the wheel</button>
+    <h3 className="cup-history-heading">Spin history</h3>
+    {history.length || state.picked?.length ? <ol className="cup-history">
+      {[...history].reverse().map((draw, i) => <li key={history.length - i}><strong>{labels[draw.match]}</strong> · {draw.cup}</li>)}
+      {[...(state.picked ?? [])].reverse().map((cup, i) => <li key={`legacy-${i}`}>{cup} · Earlier pick without a match</li>)}
+    </ol> : <p>No spins yet.</p>}
+    <form key={cups.join('\n')} onSubmit={(event) => {
+      event.preventDefault()
+      const lines = new FormData(event.currentTarget).get('cups').split('\n').map((cup) => cup.trim()).filter(Boolean)
+      const updated = [...new Map(lines.map((cup) => [cup.toLowerCase(), cup])).values()]
+      run(() => ({ ...state, cups: updated }))
+      setRotation(0)
+    }}><label>Cup list · one per line<textarea name="cups" rows="8" defaultValue={cups.join('\n')} /></label><button disabled={busy || spinning}>Save cup list</button></form>
+  </section>
+}
+
 function Admin({ row, names, run, busy }) {
   const { state } = row
   const [selected, setSelected] = useState('')
@@ -94,7 +159,6 @@ function Admin({ row, names, run, busy }) {
   const playable = [...groups, ...semifinals, 'F'].filter((code) => state.matches[code])
   const current = playable.find((code) => !state.matches[code].order.length) ?? playable.at(-1)
   const code = playable.includes(selected) ? selected : current
-  const remaining = availableCups(state)
   function savePlayer(event, id) {
     event.preventDefault()
     const name = new FormData(event.currentTarget).get('name').trim()
@@ -123,19 +187,7 @@ function Admin({ row, names, run, busy }) {
     </section> : <section className="panel"><h2>Grand Prix results</h2><label>Match<select value={code} onChange={(event) => setSelected(event.target.value)}>{playable.map((key) => <option key={key} value={key}>{labels[key]}{state.matches[key].order.length ? ' · confirmed' : ''}</option>)}</select></label>
       <ScoreEditor key={`${code}-${JSON.stringify(state.matches[code])}`} code={code} round={state.matches[code]} names={names} state={state} run={run} busy={busy} />
     </section>}
-    <section className="panel"><h2>Cup picker</h2><p>{remaining.length} available. Each cup can be picked once.</p>
-      <div className="cup-output" aria-live="polite">{state.picked.at(-1) ?? 'No cup picked yet'}</div>
-      <button className="gold-button" disabled={busy || !remaining.length} onClick={() => run(() => ({
-        ...state, picked: [...state.picked, remaining[Math.floor(Math.random() * remaining.length)]],
-      }))}>Pick a random cup</button>
-      {state.picked.length > 0 && <p>Picked cups · {state.picked.join(', ')}</p>}
-      <form key={state.cups.join('\n')} onSubmit={(event) => {
-        event.preventDefault()
-        const lines = new FormData(event.currentTarget).get('cups').split('\n').map((cup) => cup.trim()).filter(Boolean)
-        const cups = [...new Map(lines.map((cup) => [cup.toLowerCase(), cup])).values()]
-        run(() => ({ ...state, cups }))
-      }}><label>Cup list · one per line<textarea name="cups" rows="8" defaultValue={state.cups.join('\n')} /></label><button disabled={busy}>Save cup list</button></form>
-    </section>
+    <CupWheel state={state} playable={playable} run={run} busy={busy} />
   </div>
 }
 
@@ -289,9 +341,9 @@ function App() {
           })}</ul> : <p>No players registered yet.</p>}
         </> : <>
           <div className="section-heading"><div><h2>Qualifying groups</h2><p>Up to two from each group advance to the semifinals.</p></div><span>{groupCount} / {qualifyingGroups.length} confirmed</span></div>
-          <div className="qualifiers">{qualifyingGroups.map((code) => <MatchCard key={code} code={code} round={state.matches[code]} names={names} />)}</div>
+          <div className="qualifiers">{qualifyingGroups.map((code) => <MatchCard key={code} code={code} round={state.matches[code]} names={names} cup={cupForMatch(state, code)} />)}</div>
           <div className="section-heading later"><div><h2>Knockout bracket</h2><p>Up to two from each semifinal advance. Highest final score wins.</p></div></div>
-          <div className="knockouts">{[...semifinals, 'F'].map((code) => <MatchCard key={code} code={code} round={state.matches[code]} names={names} />)}</div>
+          <div className="knockouts">{[...semifinals, 'F'].map((code) => <MatchCard key={code} code={code} round={state.matches[code]} names={names} cup={cupForMatch(state, code)} />)}</div>
         </>}
       </section>}
     </main>

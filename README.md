@@ -47,4 +47,4 @@ npm run build
 - Enter each human player's total Grand Prix points, including any zero scores, and confirm each result. The app creates the next round when all matches in the current round are confirmed.
 - When a tie affects qualification, semifinal seeding, or the championship, select the players in their tiebreaker finishing order.
 - To correct a score, select the earlier match. Corrections after advancement require a second confirmation. A downstream match keeps its scores if its set of players stays the same. If its players change, it needs fresh scores and confirmation.
-- Edit the cup list to match the cups available on your console. Each pick is excluded from subsequent draws, even if the cup is removed and re-added to the list.
+- Edit the cup list to match the cups available on your console. Choose an unconfirmed match and spin the wheel. Cups stay on the wheel after every spin. The public bracket shows the latest cup assigned to each match, and the admin spin history retains every pick.

@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  alreadyAdvanced, availableCups, confirmResult, drawGroups, groups,
-  initialState, result, stage,
+  alreadyAdvanced, confirmResult, cupForMatch, drawGroups, groups,
+  initialState, recordCupDraw, result, stage,
 } from './tournament.js'
 
 const roster = Array.from({ length: 16 }, (_, i) => ({ id: String(i + 1), name: `Player ${i + 1}` }))
@@ -71,9 +71,20 @@ test('corrections preserve valid downstream scores and clear matches with a chan
   assert.equal(stage(state), 1)
 })
 
-test('excluded cups stay excluded if renamed by case or removed and re-added', () => {
-  const state = { ...initialState(), cups: ['flower cup', 'Leaf Cup'], picked: ['Flower Cup'] }
-  assert.deepEqual(availableCups(state), ['Leaf Cup'])
+test('wheel picks can repeat and the latest pick stays attached to its match', () => {
+  let state = { ...drawn(), picked: ['Flower Cup'] }
+  state = recordCupDraw(state, 'A', 'Flower Cup')
+  state = recordCupDraw(state, 'B', 'Flower Cup')
+  state = recordCupDraw(state, 'A', 'Leaf Cup')
+  assert.equal(cupForMatch(state, 'A'), 'Leaf Cup')
+  assert.equal(cupForMatch(state, 'B'), 'Flower Cup')
+  assert.equal(state.cupDraws.length, 3)
+  assert.deepEqual(state.picked, ['Flower Cup'])
+  assert.deepEqual(state.cups, initialState().cups)
+  assert.throws(() => recordCupDraw(state, 'F', 'Flower Cup'))
+  state = save(state, 'A')
+  assert.equal(cupForMatch(state, 'A'), 'Leaf Cup')
+  assert.throws(() => recordCupDraw(state, 'A', 'Flower Cup'))
 })
 
 test('every roster size from 2 to 15 advances through both semifinals and the final', () => {
