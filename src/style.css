@@ -128,3 +128,6 @@ select { appearance: none; padding-right: 2em; background-image: linear-gradient
   .brand-mark { display: none; }
   .qualifiers { grid-template-columns: 1fr; }
 }
+@media (max-width: 380px) {
+  .hero h1 { font-size: 10vw; }
+}
