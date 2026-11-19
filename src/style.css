@@ -31,7 +31,7 @@ p { color: var(--muted); line-height: 1.55; }
 .brand { border: 0; background: transparent; padding: 0; gap: .7rem; text-align: left; }
 .brand-mark { display: grid; place-items: center; background: var(--coral); color: #231426; border-radius: 9px; width: 38px; height: 38px; flex: none; }
 .top-actions { display: flex; align-items: center; gap: 1.1rem; }
-.rules { color: #e7eaf3; font-size: .9rem; font-weight: 650; }
+.rules { color: #e7eaf3; font-size: 1.05rem; font-weight: 650; }
 .hero { position: relative; isolation: isolate; overflow: hidden; margin-top: 28px; border: 1px solid #3a3e59; border-radius: 16px; background: linear-gradient(110deg, #1b2744, #20263e 50%, #382741); }
 .hero-content { position: relative; padding: clamp(26px, 5vw, 62px); }
 .checker {
