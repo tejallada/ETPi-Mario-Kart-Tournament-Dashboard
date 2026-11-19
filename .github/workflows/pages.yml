@@ -29,8 +29,22 @@ jobs:
       - run: npm test
       - name: Build with Supabase configuration
         run: |
-          if [[ -z "$VITE_SUPABASE_URL" || "$VITE_SUPABASE_PUBLISHABLE_KEY" != sb_publishable_?* ]]; then
-            echo "::error::Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in Settings > Secrets and variables > Actions > Variables. Use the Supabase publishable key."
+          missing=0
+          if [[ -z "$VITE_SUPABASE_URL" ]]; then
+            echo "::error::VITE_SUPABASE_URL is missing from Actions repository variables."
+            missing=1
+          elif [[ ! "$VITE_SUPABASE_URL" =~ ^https://[^[:space:]/]+/?$ ]]; then
+            echo "::error::VITE_SUPABASE_URL must contain only the HTTPS project URL."
+            missing=1
+          fi
+          if [[ -z "$VITE_SUPABASE_PUBLISHABLE_KEY" ]]; then
+            echo "::error::VITE_SUPABASE_PUBLISHABLE_KEY is missing from Actions repository variables."
+            missing=1
+          elif [[ ! "$VITE_SUPABASE_PUBLISHABLE_KEY" =~ ^sb_publishable_[A-Za-z0-9_-]+$ ]]; then
+            echo "::error::VITE_SUPABASE_PUBLISHABLE_KEY must contain only the key beginning with sb_publishable_."
+            missing=1
+          fi
+          if (( missing )); then
             exit 1
           fi
           npm run build
